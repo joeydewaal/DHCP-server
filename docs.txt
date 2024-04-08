@@ -1,0 +1,285 @@
+RFC 2131
+  Figure 1 gives the format of a DHCP message and table 1 describes
+   each of the fields in the DHCP message.  The numbers in parentheses
+   indicate the size of each field in octets.  The names for the fields
+   given in the figure will be used throughout this document to refer to
+   the fields in DHCP messages.
+
+
+Figure 1
+0                   1                   2                   3
+0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|     op (1)    |   htype (1)   |   hlen (1)    |   hops (1)    |
++---------------+---------------+---------------+---------------+
+|                            xid (4)                            |
++-------------------------------+-------------------------------+
+|           secs (2)            |           flags (2)           |
++-------------------------------+-------------------------------+
+|                          ciaddr  (4)                          |
++---------------------------------------------------------------+
+|                          yiaddr  (4)                          |
++---------------------------------------------------------------+
+|                          siaddr  (4)                          |
++---------------------------------------------------------------+
+|                          giaddr  (4)                          |
++---------------------------------------------------------------+
+|                                                               |
+|                          chaddr  (16)                         |
+|                                                               |
+|                                                               |
++---------------------------------------------------------------+
+|                                                               |
+|                          sname   (64)                         |
++---------------------------------------------------------------+
+|                                                               |
+|                          file    (128)                        |
++---------------------------------------------------------------+
+|                                                               |
+|                          options (variable)                   |
++---------------------------------------------------------------+
+
+   FIELD      OCTETS       DESCRIPTION
+   -----      ------       -----------
+
+   op            1  Message op code / message type.
+                    1 = BOOTREQUEST, 2 = BOOTREPLY
+   htype         1  Hardware address type, see ARP section in "Assigned
+                    Numbers" RFC; e.g., '1' = 10mb ethernet.
+   hlen          1  Hardware address length (e.g.  '6' for 10mb
+                    ethernet).
+   hops          1  Client sets to zero, optionally used by relay agents
+                    when booting via a relay agent.
+   xid           4  Transaction ID, a random number chosen by the
+                    client, used by the client and server to associate
+                    messages and responses between a client and a
+                    server.
+   secs          2  Filled in by client, seconds elapsed since client
+                    began address acquisition or renewal process.
+   flags         2  Flags (see figure 2).
+   ciaddr        4  Client IP address; only filled in if client is in
+                    BOUND, RENEW or REBINDING state and can respond
+                    to ARP requests.
+   yiaddr        4  'your' (client) IP address.
+   siaddr        4  IP address of next server to use in bootstrap;
+                    returned in DHCPOFFER, DHCPACK by server.
+   giaddr        4  Relay agent IP address, used in booting via a
+                    relay agent.
+   chaddr       16  Client hardware address.
+   sname        64  Optional server host name, null terminated string.
+   file        128  Boot file name, null terminated string; "generic"
+                    name or null in DHCPDISCOVER, fully qualified
+                    directory-path name in DHCPOFFER.
+   options     var  Optional parameters field.  See the options
+                    documents for a list of defined options.
+
+
+   Message         Use
+   -------         ---
+
+   DHCPDISCOVER -  Client broadcast to locate available servers.
+
+   DHCPOFFER    -  Server to client in response to DHCPDISCOVER with
+                   offer of configuration parameters.
+
+   DHCPREQUEST  -  Client message to servers either (a) requesting
+                   offered parameters from one server and implicitly
+                   declining offers from all others, (b) confirming
+                   correctness of previously allocated address after,
+                   e.g., system reboot, or (c) extending the lease on a
+                   particular network address.
+
+   DHCPACK      -  Server to client with configuration parameters,
+                   including committed network address.
+
+   DHCPNAK      -  Server to client indicating client's notion of network
+                   address is incorrect (e.g., client has moved to new
+                   subnet) or client's lease as expired
+
+   DHCPDECLINE  -  Client to server indicating network address is already
+                   in use.
+
+   DHCPRELEASE  -  Client to server relinquishing network address and
+                   cancelling remaining lease.
+
+   DHCPINFORM   -  Client to server, asking only for local configuration
+                   parameters; client already has externally configured
+                   network address.
+
+
+2.1 Configuration parameters repository
+
+    The first service provided by DHCP is to provide persistent storage
+    of network parameters for network clients.  The model of DHCP
+    persistent storage is that the DHCP service stores a key-value entry
+    for each client, where the key is some unique identifier (for
+    example, an IP subnet number and a unique identifier within the
+    subnet) and the value contains the configuration parameters for the
+    client.
+
+    For example, the key might be the pair (IP-subnet-number, hardware-
+    address) (note that the "hardware-address" should be typed by the
+    type of hardware to accommodate possible duplication of hardware
+    addresses resulting from bit-ordering problems in a mixed-media,
+    bridged network) allowing for serial or concurrent reuse of a
+    hardware address on different subnets, and for hardware addresses
+    that may not be globally unique.  Alternately, the key might be the
+    pair (IP-subnet-number, hostname), allowing the server to assign
+    parameters intelligently to a DHCP client that has been moved to a
+    different subnet or has changed hardware addresses (perhaps because
+    the network interface failed and was replaced). The protocol defines
+    that the key will be (IP-subnet-number, hardware-address) unless the
+    client explicitly supplies an identifier using the 'client
+    identifier' option.           A client can query the DHCP service to
+    retrieve its configuration parameters.  The client interface to the
+    configuration parameters repository consists of protocol messages to
+    request configuration parameters and responses from the server
+    carrying the configuration parameters.
+
+2.2 Dynamic allocation of network addresses
+
+    The second service provided by DHCP is the allocation of temporary or
+    permanent network (IP) addresses to clients.  The basic mechanism for
+    the dynamic allocation of network addresses is simple: a client
+    requests the use of an address for some period of time.  The
+    allocation mechanism (the collection of DHCP servers) guarantees not
+    to reallocate that address within the requested time and attempts to
+    return the same network address each time the client requests an
+    address.  In this document, the period over which a network address
+    is allocated to a client is referred to as a "lease" [11].  The
+    client may extend its lease with subsequent requests.  The client may
+    issue a message to release the address back to the server when the
+    client no longer needs the address.  The client may ask for a
+    permanent assignment by asking for an infinite lease.  Even when
+    assigning "permanent" addresses, a server may choose to give out
+    lengthy but non-infinite leases to allow detection of the fact that
+    the client has been retired.
+
+    In some environments it will be necessary to reassign network
+    addresses due to exhaustion of available addresses.  In such
+    environments, the allocation mechanism will reuse addresses whose
+    lease has expired.  The server should use whatever information is
+    available in the configuration information repository to choose an
+    address to reuse.  For example, the server may choose the least
+    recently assigned address.  As a consistency check, the allocating
+    server SHOULD probe the reused address before allocating the address,
+    e.g., with an ICMP echo request, and the client SHOULD probe the
+    newly received address, e.g., with ARP.
+
+    The first four octets of the 'options' field of the DHCP message
+    contain the (decimal) values 99, 130, 83 and 99, respectively (this
+    is the same magic cookie as is defined in RFC 1497 [17]).
+
+3.1 Client-server interaction - allocating a network address
+
+
+    The following summary of the protocol exchanges between clients and
+       servers refers to the DHCP messages described in table 2.  The
+       timeline diagram in figure 3 shows the timing relationships in a
+       typical client-server interaction.  If the client already knows its
+       address, some steps may be omitted; this abbreviated interaction is
+       described in section 3.2.
+
+       1. The client broadcasts a DHCPDISCOVER message on its local physical
+          subnet.  The DHCPDISCOVER message MAY include options that suggest
+          values for the network address and lease duration.  BOOTP relay
+          agents may pass the message on to DHCP servers not on the same
+          physical subnet.
+
+       2. Each server may respond with a DHCPOFFER message that includes an
+          available network address in the 'yiaddr' field (and other
+          configuration parameters in DHCP options).  Servers need not
+          reserve the offered network address, although the protocol will
+          work more efficiently if the server avoids allocating the offered
+          network address to another client.  When allocating a new address,
+          servers SHOULD check that the offered network address is not already
+          in use; e.g., the server may probe the offered address
+          with an ICMP Echo Request.  Servers SHOULD be implemented so that
+          network administrators MAY choose to disable probes of newly
+          allocated addresses.  The server transmits the DHCPOFFER message
+          to the client, using the BOOTP relay agent if necessary.
+
+      3. The client receives one or more DHCPOFFER messages from one or more
+         servers.  The client may choose to wait for multiple responses.
+         The client chooses one server from which to request configuration
+         parameters, based on the configuration parameters offered in the
+         DHCPOFFER messages.  The client broadcasts a DHCPREQUEST message
+         that MUST include the 'server identifier' option to indicate which
+         server it has selected, and that MAY include other options
+         specifying desired configuration values.  The 'requested IP
+         address' option MUST be set to the value of 'yiaddr' in the
+         DHCPOFFER message from the server.  This DHCPREQUEST message is
+         broadcast and relayed through DHCP/BOOTP relay agents.  To help
+         ensure that any BOOTP relay agents forward the DHCPREQUEST message
+         to the same set of DHCP servers that received the original
+         DHCPDISCOVER message, the DHCPREQUEST message MUST use the same
+         value in the DHCP message header's 'secs' field and be sent to the
+         same IP broadcast address as the original DHCPDISCOVER message.
+         The client times out and retransmits the DHCPDISCOVER message if
+         the client receives no DHCPOFFER messages.
+
+      4. The servers receive the DHCPREQUEST broadcast from the client.
+         Those servers not selected by the DHCPREQUEST message use the
+         message as notification that the client has declined that server's
+         offer.  The server selected in the DHCPREQUEST message commits the
+         binding for the client to persistent storage and responds with a
+         DHCPACK message containing the configuration parameters for the
+         requesting client.  The combination of 'client identifier' or
+         'chaddr' and assigned network address constitute a unique
+         identifier for the client's lease and are used by both the client
+         and server to identify a lease referred to in any DHCP messages.
+         Any configuration parameters in the DHCPACK message SHOULD NOT
+         conflict with those in the earlier DHCPOFFER message to which the
+         client is responding.  The server SHOULD NOT check the offered
+         network address at this point. The 'yiaddr' field in the DHCPACK
+         messages is filled in with the selected network address.
+
+         If the selected server is unable to satisfy the DHCPREQUEST message
+         (e.g., the requested network address has been allocated), the
+         server SHOULD respond with a DHCPNAK message.
+
+         A server MAY choose to mark addresses offered to clients in
+         DHCPOFFER messages as unavailable.  The server SHOULD mark an
+         address offered to a client in a DHCPOFFER message as available if
+         the server receives no DHCPREQUEST message from that client.
+
+
+      5. The client receives the DHCPACK message with configuration
+         parameters.  The client SHOULD perform a final check on the
+         parameters (e.g., ARP for allocated network address), and notes the
+         duration of the lease specified in the DHCPACK message.  At this
+
+         point, the client is configured.  If the client detects that the
+         address is already in use (e.g., through the use of ARP), the
+         client MUST send a DHCPDECLINE message to the server and restarts
+         the configuration process.  The client SHOULD wait a minimum of ten
+         seconds before restarting the configuration process to avoid
+         excessive network traffic in case of looping.
+
+         If the client receives a DHCPNAK message, the client restarts the
+         configuration process.
+
+         The client times out and retransmits the DHCPREQUEST message if the
+         client receives neither a DHCPACK or a DHCPNAK message.  The client
+         retransmits the DHCPREQUEST according to the retransmission
+         algorithm in section 4.1.  The client should choose to retransmit
+         the DHCPREQUEST enough times to give adequate probability of
+         contacting the server without causing the client (and the user of
+         that client) to wait overly long before giving up; e.g., a client
+         retransmitting as described in section 4.1 might retransmit the
+         DHCPREQUEST message four times, for a total delay of 60 seconds,
+         before restarting the initialization procedure.  If the client
+         receives neither a DHCPACK or a DHCPNAK message after employing the
+         retransmission algorithm, the client reverts to INIT state and
+         restarts the initialization process.  The client SHOULD notify the
+         user that the initialization process has failed and is restarting.
+
+      6. The client may choose to relinquish its lease on a network address
+         by sending a DHCPRELEASE message to the server.  The client
+         identifies the lease to be released with its 'client identifier',
+         or 'chaddr' and network address in the DHCPRELEASE message. If the
+         client used a 'client identifier' when it obtained the lease, it
+         MUST use the same 'client identifier' in the DHCPRELEASE message.
+
+3.2 Client-server interaction - reusing a previously allocated network
+    address

@@ -7,7 +7,7 @@ mod buffer;
 mod packet;
 
 fn main() {
-    let server = UdpSocket::bind("0.0.0.0:68").unwrap();
+    let server = UdpSocket::bind("255.255.255.255:68").unwrap();
     // server.connect("192.168.255.255:67").unwrap();
     server.set_broadcast(true).unwrap();
 
@@ -27,17 +27,15 @@ fn main() {
 
     let mut buff1  = [0; 4096];
     let len = packet.write_to_bytes(&mut buff1);
-    println!("bytes: {:?}\nlen: {}", &buff1[0..len], len);
+    // println!("bytes: {:?}\nlen: {}", &buff1[0..len], len);
     println!("sent: {}", server.send_to(&buff1[..len], "255.255.255.255:67").unwrap());
-
-
 
 
     let mut buff  = [0; 4096];
     // let server = UdpSocket::bind("255.255.255.255:67").unwrap();
     let (len, src) = server.recv_from(&mut buff).unwrap();
-    println!("bytes: {:?}\nlen: {}", &buff[0..len], len);
-    let packet = packet::Packet::try_from(&buff[..len]);
-    // println!("len: {} src: {:?}", len, src);
-    // println!("packet: {:?}", packet);
+    // println!("bytes: {:?}\nlen: {}", &buff[0..len], len);
+    let packet = Packet::try_from(&buff[..len]).unwrap();
+    println!("len: {} src: {:?}", len, src);
+    println!("packet: {:?}", packet);
 }

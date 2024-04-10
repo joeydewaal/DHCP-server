@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::net::Ipv4Addr;
 
 mod option;
@@ -9,7 +10,7 @@ use crate::buffer::ByteWriter;
 
 const MAGIC_COOKIE: [u8; 4] = [99, 130, 83, 99];
 
-#[derive(Debug)]
+// #[derive(Debug)]
 pub struct Packet {
     op: MessageType,
     htype: u8,
@@ -40,6 +41,26 @@ pub struct Packet {
     pub options: Vec<DHCPOption>,
 }
 
+impl Debug for Packet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Packet")
+            .field("op", &self.op)
+            .field("htype", &self.htype)
+            .field("hlen", &self.htype)
+            .field("hops", &self.hops)
+            .field("xid", &self.hops)
+            .field("secs", &self.secs)
+            .field("flags", &self.flags)
+            .field("ciaddr", &self.ciaddr)
+            .field("yiaddr", &self.yiaddr)
+            .field("siaddr", &self.siaddr)
+            .field("giaddr", &self.giaddr)
+            .field("chaddr", &self.chaddr)
+            .field("options", &self.options)
+            .finish()
+    }
+}
+
 impl Packet {
     pub fn new_request() -> Self {
         Self {
@@ -49,7 +70,7 @@ impl Packet {
             hops: 0,
             xid: 666,
             secs: 128,
-            flags: 0,
+            flags: 1 << 15,
             ciaddr: Ipv4Addr::from([0, 0, 0, 0]),
             yiaddr: Ipv4Addr::from([0, 0, 0, 0]),
             siaddr: Ipv4Addr::from([0, 0, 0, 0]),

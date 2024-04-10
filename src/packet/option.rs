@@ -62,7 +62,6 @@ impl DHCPOption {
 
         loop {
             let result = DHCPOption::from_bytes(&buffer[start_index_option..])?;
-            println!("opt: {:?}", result);
 
             match result {
                 OptionsParseResult::End => break,
@@ -205,7 +204,7 @@ impl DHCPOption {
                 subnet: Ipv4Addr::from(bytes.read_u32(2)),
             },
             3 => DHCPOption::Router {
-                routers: bytes.read_u32_many(2, len).map(Ipv4Addr::from).collect(),
+                routers: bytes.read_u32_many(2, len / 4).map(Ipv4Addr::from).collect(),
             },
             6 => DHCPOption::DomainNameServer {
                 dns_servers: bytes.read_u32_many(2, len).map(Ipv4Addr::from).collect(),
@@ -220,6 +219,7 @@ impl DHCPOption {
             53 => DHCPOption::DHCPMessageType(
                 DHCPMessageType::try_from(bytes[2]).map_err(|_| OptionParseErr::DHCPMessageType)?,
             ),
+            54 => DHCPOption::ServerIdentifier(Ipv4Addr::from(bytes.read_u32(2))),
             55 => DHCPOption::ParameterRequest {
                 requested_options: Vec::from(&bytes[2..(2 + len)]),
             },

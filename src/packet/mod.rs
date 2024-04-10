@@ -1,16 +1,17 @@
 use std::fmt::Debug;
 use std::net::Ipv4Addr;
 
+mod header;
 mod option;
 
-pub use option::DHCPOption;
 pub use option::DHCPMessageType;
+pub use option::DHCPOption;
 
 use crate::buffer::ByteWriter;
+use crate::standard::MAGIC_COOKIE;
 
-const MAGIC_COOKIE: [u8; 4] = [99, 130, 83, 99];
+use self::header::MessageType;
 
-// #[derive(Debug)]
 pub struct Packet {
     op: MessageType,
     htype: u8,
@@ -25,7 +26,7 @@ pub struct Packet {
     ciaddr: Ipv4Addr,
 
     /// 'your' (client) IP address.
-    yiaddr: Ipv4Addr,
+    pub yiaddr: Ipv4Addr,
     /// IP address of next server to use in bootstrap;
     /// returned in DHCPOFFER, DHCPACK by server.
     siaddr: Ipv4Addr,
@@ -39,6 +40,9 @@ pub struct Packet {
     /// name or null in DHCPDISCOVER, fully qualified
     file: [u8; 128],
     pub options: Vec<DHCPOption>,
+
+    /// Alle DHCP berichten zouden deze option moeten hebben
+    pub dhcp_message_type: DHCPMessageType,
 }
 
 impl Debug for Packet {
@@ -55,14 +59,14 @@ impl Debug for Packet {
             .field("yiaddr", &self.yiaddr)
             .field("siaddr", &self.siaddr)
             .field("giaddr", &self.giaddr)
-            .field("chaddr", &self.chaddr)
+            // .field("chaddr", &self.chaddr)
             .field("options", &self.options)
             .finish()
     }
 }
 
 impl Packet {
-    pub fn new_request() -> Self {
+    pub fn new_request(dhcp_message_type: DHCPMessageType) -> Self {
         Self {
             op: MessageType::BOOTREQUEST,
             htype: 1,
@@ -79,7 +83,18 @@ impl Packet {
             sname: [0; 64],
             file: [0; 128],
             options: Vec::new(),
+            dhcp_message_type,
         }
+    }
+
+    pub fn into_response(&mut self, dhcp_message_type: DHCPMessageType) {
+        self.op = MessageType::BOOTREPLY;
+        self.options.clear();
+        self.dhcp_message_type = dhcp_message_type;
+    }
+
+    pub fn is_broadcast(&self) -> bool {
+        (self.flags & (1 << 15)) != 0
     }
 
     pub fn write_to_bytes(&self, buffer: &mut [u8]) -> usize {
@@ -98,15 +113,19 @@ impl Packet {
         buffer.write_slice(44, &self.sname);
         buffer.write_slice(108, &self.file);
         buffer.write_slice(236, &MAGIC_COOKIE);
+        buffer[240] = 53;
+        buffer[241] = 1;
+        buffer[242] = self.dhcp_message_type as u8;
 
-        let mut len = 240;
-        len += DHCPOption::to_bytes_many(&self.options, &mut buffer[240..]);
+        let mut len = 243;
+        len += DHCPOption::to_bytes_many(&self.options, &mut buffer[len..]);
         len
     }
 }
 
 impl TryFrom<&[u8]> for Packet {
     type Error = ();
+
     fn try_from(buffer: &[u8]) -> Result<Self, Self::Error> {
         let mut chaddr: [u8; 16] = [0; 16];
         chaddr.copy_from_slice(&buffer[28..44]);
@@ -119,7 +138,16 @@ impl TryFrom<&[u8]> for Packet {
 
         assert!(buffer[236..240] == MAGIC_COOKIE);
 
-        // println!("rest: {:?}", &buffer[240..]);
+        let mut options = DHCPOption::from_bytes_many(&buffer[240..]).unwrap();
+
+        let Some((i, dhcp_message_type)) = options.iter().enumerate().find_map(|(i, opt)| match opt {
+            DHCPOption::DHCPMessageType(message_type) => Some((i,*message_type)),
+            _ => None,
+        }) else {
+            return Err(());
+        };
+        options.swap_remove(i);
+
 
         let packet = Packet {
             op: MessageType::try_from(buffer[0]).unwrap(),
@@ -136,34 +164,9 @@ impl TryFrom<&[u8]> for Packet {
             chaddr,
             sname,
             file,
-            options: DHCPOption::from_bytes_many(&buffer[240..]).unwrap(),
+            options,
+            dhcp_message_type,
         };
         Ok(packet)
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum MessageType {
-    BOOTREQUEST = 1,
-    BOOTREPLY = 2,
-}
-
-impl TryFrom<u8> for MessageType {
-    type Error = ();
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        Ok(match value {
-            1 => MessageType::BOOTREQUEST,
-            2 => MessageType::BOOTREPLY,
-            _ => return Err(()),
-        })
-    }
-}
-
-impl From<MessageType> for u8 {
-    fn from(value: MessageType) -> Self {
-        match value {
-            MessageType::BOOTREQUEST => 1,
-            MessageType::BOOTREPLY => 2
-        }
     }
 }

@@ -1,41 +1,62 @@
 #![allow(dead_code)]
+use std::{net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket}, time::Duration};
 
-use std::net::UdpSocket;
+use packet::Packet;
+use standard::CLIENT_PORT;
 
-use packet::{DHCPOption, Packet};
+use crate::{packet::{DHCPMessageType, DHCPOption}, standard::{BROADCAST_ADDR, SERVER_PORT}};
 mod buffer;
 mod packet;
+mod standard;
 
 fn main() {
-    let server = UdpSocket::bind("255.255.255.255:68").unwrap();
-    // server.connect("192.168.255.255:67").unwrap();
+    let server = UdpSocket::bind((BROADCAST_ADDR, SERVER_PORT)).unwrap();
     server.set_broadcast(true).unwrap();
 
-    let mut packet = Packet::new_request();
-    packet.options.push(DHCPOption::DHCPMessageType(
-        packet::DHCPMessageType::DHCPDISCOVER,
-    ));
-    packet.options.push(DHCPOption::ParameterRequest {
-        requested_options: [
-            252, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
-            46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 67, 66,
-        ]
-        .into(),
-    });
-    packet.options.push(DHCPOption::IpLeasetime { secs: 1 });
+    loop {
+        let mut buff = [0; 4096];
+        let (len, src) = server.recv_from(&mut buff).unwrap();
 
-    let mut buff1  = [0; 4096];
-    let len = packet.write_to_bytes(&mut buff1);
-    // println!("bytes: {:?}\nlen: {}", &buff1[0..len], len);
-    println!("sent: {}", server.send_to(&buff1[..len], "255.255.255.255:67").unwrap());
+        let packet = match Packet::try_from(&buff[..len]) {
+            Ok(packet) => packet,
+            Err(error) => {
+                println!("ERR: {error:?}");
+                continue;
+            }
+        };
 
+        let response = handle_packet(packet, src);
+        if let Some(resp) = response {
 
-    let mut buff  = [0; 4096];
-    // let server = UdpSocket::bind("255.255.255.255:67").unwrap();
-    let (len, src) = server.recv_from(&mut buff).unwrap();
-    // println!("bytes: {:?}\nlen: {}", &buff[0..len], len);
-    let packet = Packet::try_from(&buff[..len]).unwrap();
-    println!("len: {} src: {:?}", len, src);
-    println!("packet: {:?}", packet);
+            let len = resp.write_to_bytes(&mut buff);
+
+            let mut response_addr = src.ip();
+            if resp.is_broadcast() {
+                response_addr = IpAddr::from(BROADCAST_ADDR);
+            }
+            let _ = server.send_to(&buff[0..len], (response_addr, CLIENT_PORT)).unwrap();
+        }
+    }
+}
+
+fn handle_packet(mut packet: Packet, src: SocketAddr) -> Option<Packet> {
+    println!(
+        "DHCP message type: {:?} from: {:?}",
+        packet.dhcp_message_type, src
+    );
+
+    match packet.dhcp_message_type {
+        DHCPMessageType::DHCPDISCOVER => {
+            packet.into_response(DHCPMessageType::DHCPOFFER);
+            packet.yiaddr = Ipv4Addr::new(192, 168, 0, 66);
+            packet.options.push(packet::DHCPOption::Subnet { subnet: Ipv4Addr::new(255, 255, 255, 0) });
+            packet.options.push(DHCPOption::IpLeasetime { secs: Duration::from_secs(99).into() });
+            packet.options.push(DHCPOption::ServerIdentifier(Ipv4Addr::new(192, 168, 0, 15)));
+
+            return Some(packet);
+        },
+        _ => ()
+    }
+
+    None
 }

@@ -28,7 +28,7 @@ pub enum DHCPOption {
     RequestedIp(Ipv4Addr),
     /// option 51
     IpLeasetime {
-        secs: u32,
+        secs: LeaseTime,
     },
     /// option 52
     OptionOverload(OptionOverload),
@@ -113,61 +113,67 @@ impl DHCPOption {
                     .for_each(|(i, ipv4)| buffer.write_slice(i * 4 + 2, &ipv4.octets()));
 
                 dns_servers.len() * 4
-            },
+            }
             DHCPOption::RequestedIp(ip) => {
                 buffer.write_tag(50);
                 buffer.write_len(4);
                 buffer.write_slice(2, &ip.octets());
                 4
-            },
+            }
             DHCPOption::IpLeasetime { secs } => {
                 buffer.write_tag(51);
                 buffer.write_len(4);
-                buffer.write_u32(2, *secs);
+                buffer.write_u32(2, secs.to_bytes());
                 4
-            },
+            }
             DHCPOption::OptionOverload(overload) => {
                 buffer.write_tag(52);
                 buffer.write_len(1);
                 buffer[2] = *overload as u8;
                 1
-            },
+            }
             DHCPOption::DHCPMessageType(message_type) => {
                 buffer.write_tag(53);
                 buffer.write_len(1);
                 buffer[2] = *message_type as u8;
                 1
-            },
+            }
+            DHCPOption::ServerIdentifier(ip) => {
+                buffer.write_tag(54);
+                buffer.write_len(4);
+                buffer.write_slice(2, &ip.octets());
+                4
+            }
             DHCPOption::ParameterRequest { requested_options } => {
                 buffer.write_tag(55);
                 buffer.write_len(requested_options.len() as u8);
                 buffer.write_slice(2, &requested_options);
                 requested_options.len()
-            },
+            }
             DHCPOption::Message(message) => {
                 buffer.write_tag(56);
                 buffer.write_len(message.len() as u8);
                 buffer.write_slice(2, message.as_bytes());
                 message.len()
-            },
+            }
             DHCPOption::DHCPMessageSize(size) => {
                 buffer.write_tag(57);
                 buffer.write_len(2);
                 buffer.write_u16(2, *size);
                 2
-            },
+            }
             DHCPOption::RenewalTime { secs } => {
                 buffer.write_tag(58);
                 buffer.write_len(4);
                 buffer.write_u32(2, *secs);
                 4
-            },
+            }
             DHCPOption::RebindingTime { secs } => {
                 buffer.write_tag(59);
                 buffer.write_len(4);
                 buffer.write_u32(2, *secs);
                 4
-            },
+            }
             _ => 0,
         }
     }
@@ -204,14 +210,20 @@ impl DHCPOption {
                 subnet: Ipv4Addr::from(bytes.read_u32(2)),
             },
             3 => DHCPOption::Router {
-                routers: bytes.read_u32_many(2, len / 4).map(Ipv4Addr::from).collect(),
+                routers: bytes
+                    .read_u32_many(2, len / 4)
+                    .map(Ipv4Addr::from)
+                    .collect(),
             },
             6 => DHCPOption::DomainNameServer {
-                dns_servers: bytes.read_u32_many(2, len).map(Ipv4Addr::from).collect(),
+                dns_servers: bytes
+                    .read_u32_many(2, len / 4)
+                    .map(Ipv4Addr::from)
+                    .collect(),
             },
             50 => DHCPOption::RequestedIp(Ipv4Addr::from(bytes.read_u32(2))),
             51 => DHCPOption::IpLeasetime {
-                secs: bytes.read_u32(2),
+                secs: bytes.read_u32(2).into(),
             },
             52 => DHCPOption::OptionOverload(
                 OptionOverload::try_from(bytes[2]).map_err(|_| OptionParseErr::OptionOverLoad)?,
@@ -244,7 +256,7 @@ impl DHCPOption {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum LeaseTime {
     Infinite,
     Finite(Duration),
@@ -255,6 +267,21 @@ impl From<u32> for LeaseTime {
         match value {
             0xffffffff => LeaseTime::Infinite,
             secs => LeaseTime::Finite(Duration::from_secs(secs as u64)),
+        }
+    }
+}
+
+impl From<Duration> for LeaseTime {
+    fn from(value: Duration) -> Self {
+        Self::Finite(value)
+    }
+}
+
+impl LeaseTime {
+    fn to_bytes(&self) -> u32 {
+        match self {
+            LeaseTime::Infinite => 0xffffffff,
+            LeaseTime::Finite(duration) => duration.as_secs() as u32,
         }
     }
 }

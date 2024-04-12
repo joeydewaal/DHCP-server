@@ -2,6 +2,7 @@ pub trait ByteReader {
     fn read_u32(&self, start: usize) -> u32;
     fn read_u32_many(&self, start: usize, len: usize) -> impl Iterator<Item = u32>;
     fn read_u16(&self, start: usize) -> u16;
+    // fn read<T>(&self, start: usize) -> T;
 }
 
 impl ByteReader for &[u8] {
@@ -29,7 +30,6 @@ pub trait ByteWriter {
     fn write_slice(&mut self, start: usize, value: &[u8]);
     fn write_tag(&mut self, tag: u8);
     fn write_len(&mut self, len: u8);
-    // fn write<T>(&mut self, start: usize, value: T);
 }
 
 impl ByteWriter for [u8] {

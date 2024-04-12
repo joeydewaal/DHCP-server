@@ -183,9 +183,8 @@ Figure 1
 
        2. Each server may respond with a DHCPOFFER message that includes an
           available network address in the 'yiaddr' field (and other
-          configuration parameters in DHCP options).  Servers need not (to)
-          reserve the offered network address. The server transmits the DHCPOFFER
-          message to the client, using the BOOTP relay agent if necessary.
+          configuration parameters in DHCP options). The server transmits the
+          DHCPOFFER message to the client.
 
       3. The client receives one or more DHCPOFFER messages from one or more
          servers and chooses one offer. The client broadcasts a DHCPREQUEST message

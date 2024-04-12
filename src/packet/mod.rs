@@ -3,6 +3,7 @@ use std::net::Ipv4Addr;
 
 mod header;
 mod option;
+mod time;
 
 pub use option::DHCPMessageType;
 pub use option::DHCPOption;
@@ -12,6 +13,7 @@ use crate::standard::MAGIC_COOKIE;
 
 use self::header::MessageType;
 
+#[derive(Debug)]
 pub struct Packet {
     op: MessageType,
     htype: u8,
@@ -45,25 +47,26 @@ pub struct Packet {
     pub dhcp_message_type: DHCPMessageType,
 }
 
-impl Debug for Packet {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Packet")
-            .field("op", &self.op)
-            .field("htype", &self.htype)
-            .field("hlen", &self.htype)
-            .field("hops", &self.hops)
-            .field("xid", &self.hops)
-            .field("secs", &self.secs)
-            .field("flags", &self.flags)
-            .field("ciaddr", &self.ciaddr)
-            .field("yiaddr", &self.yiaddr)
-            .field("siaddr", &self.siaddr)
-            .field("giaddr", &self.giaddr)
-            // .field("chaddr", &self.chaddr)
-            .field("options", &self.options)
-            .finish()
-    }
-}
+// impl Debug for Packet {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         f.debug_struct("Packet")
+//             .field("DHCP_message_type", &self.dhcp_message_type)
+//             .field("op", &self.op)
+//             .field("htype", &self.htype)
+//             .field("hlen", &self.htype)
+//             .field("hops", &self.hops)
+//             .field("xid", &self.hops)
+//             .field("secs", &self.secs)
+//             .field("flags", &self.flags)
+//             .field("ciaddr", &self.ciaddr)
+//             .field("yiaddr", &self.yiaddr)
+//             .field("siaddr", &self.siaddr)
+//             .field("giaddr", &self.giaddr)
+//             // .field("chaddr", &self.chaddr)
+//             .field("options", &self.options)
+//             .finish()
+//     }
+// }
 
 impl Packet {
     pub fn new_request(dhcp_message_type: DHCPMessageType) -> Self {
@@ -85,6 +88,25 @@ impl Packet {
             options: Vec::new(),
             dhcp_message_type,
         }
+    }
+
+    pub fn print(&self) {
+        println!("op:\t\t\t{:?}", self.op);
+        println!("dhcp_message_type:\t{:?}", self.dhcp_message_type);
+        println!("htype:\t\t\t{:?}", self.htype);
+        println!("hlen:\t\t\t{:?}", self.op);
+        println!("xid:\t\t\t{:?}", self.xid);
+        println!("secs:\t\t\t{:?}", std::time::Duration::from_secs(self.secs as u64));
+        println!("flags:\t\t\t{:b}", self.flags);
+        println!("ciaddr:\t\t\t{:?}", self.ciaddr);
+        println!("yiaddr:\t\t\t{:?}", self.yiaddr);
+        println!("siaddr:\t\t\t{:?}", self.siaddr);
+        println!("giaddr:\t\t\t{:?}", self.giaddr);
+        println!("chaddr: {:?}", self.chaddr);
+        println!("sname: {:?}", self.sname);
+        println!("file: {:?}", self.file);
+        println!("--- options ---");
+        self.options.iter().for_each(|opt| println!("{opt:?}"));
     }
 
     pub fn into_response(&mut self, dhcp_message_type: DHCPMessageType) {

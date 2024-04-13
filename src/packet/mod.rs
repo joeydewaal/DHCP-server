@@ -7,6 +7,7 @@ mod time;
 
 pub use option::DHCPMessageType;
 pub use option::DHCPOption;
+pub use time::LeaseTime;
 
 use crate::buffer::ByteWriter;
 use crate::standard::MAGIC_COOKIE;
@@ -20,7 +21,7 @@ pub struct Packet {
     hlen: u8,
     hops: u8,
 
-    xid: u32,
+    pub xid: u32,
     secs: u16,
     /// als 1e bit 1 is moet dit terug gestuurd worden als broadcast bericht
     /// Als deze 0 is dan moet dit bericht terug gestuurd worden naar het aders in yiaddr

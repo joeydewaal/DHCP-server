@@ -1,4 +1,4 @@
-use crate::buffer::{ByteReader, ByteWriter};
+use crate::buffer::ByteReader;
 use std::net::Ipv4Addr;
 use std::str;
 
@@ -12,7 +12,7 @@ const END_OPTION: u8 = 255;
 const PAD_OPTION: u8 = 0;
 
 /// https://datatracker.ietf.org/doc/html/rfc1533
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum DHCPOption {
     Unimplemented {
         option_code: u8,

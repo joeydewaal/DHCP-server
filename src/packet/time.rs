@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum LeaseTime {
     Infinite,
     Finite(Duration),

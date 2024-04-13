@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::net::Ipv4Addr;
 
@@ -42,32 +43,11 @@ pub struct Packet {
     /// Boot file name, null terminated string; "generic"
     /// name or null in DHCPDISCOVER, fully qualified
     file: [u8; 128],
-    pub options: Vec<DHCPOption>,
+    options: HashSet<DHCPOption>,
 
     /// Alle DHCP berichten zouden deze option moeten hebben
     pub dhcp_message_type: DHCPMessageType,
 }
-
-// impl Debug for Packet {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.debug_struct("Packet")
-//             .field("DHCP_message_type", &self.dhcp_message_type)
-//             .field("op", &self.op)
-//             .field("htype", &self.htype)
-//             .field("hlen", &self.htype)
-//             .field("hops", &self.hops)
-//             .field("xid", &self.hops)
-//             .field("secs", &self.secs)
-//             .field("flags", &self.flags)
-//             .field("ciaddr", &self.ciaddr)
-//             .field("yiaddr", &self.yiaddr)
-//             .field("siaddr", &self.siaddr)
-//             .field("giaddr", &self.giaddr)
-//             // .field("chaddr", &self.chaddr)
-//             .field("options", &self.options)
-//             .finish()
-//     }
-// }
 
 impl Packet {
     pub fn new_request(dhcp_message_type: DHCPMessageType) -> Self {
@@ -86,26 +66,62 @@ impl Packet {
             chaddr: [222, 173, 192, 222, 202, 254, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             sname: [0; 64],
             file: [0; 128],
-            options: Vec::new(),
+            options: HashSet::new(),
             dhcp_message_type,
         }
     }
 
+    /// voegt een optie toe, als deze nog niet bestaat
+    pub fn add_option(&mut self, option: DHCPOption) -> bool {
+        self.options.insert(option)
+    }
+
+    /// voegt optie toe en overschrijft als deze er al is
+    pub fn override_option(&mut self, option: DHCPOption) -> Option<DHCPOption> {
+        self.options.replace(option)
+    }
+
+    pub fn options_cloned(&self) -> HashSet<DHCPOption> {
+        self.options.clone()
+    }
+
+    pub fn get_requested_ip(&self) -> Option<Ipv4Addr> {
+        self.options
+            .get(&DHCPOption::RequestedIp(Ipv4Addr::new(0, 0, 0, 0)))
+            .map(|ip| match ip {
+                DHCPOption::RequestedIp(ip) => ip,
+                _ => unreachable!(),
+            })
+            .copied()
+    }
+
+    pub fn get_leasetime(&self) -> Option<LeaseTime> {
+        self.options
+            .get(&DHCPOption::IpLeasetime(LeaseTime::Infinite))
+            .map(|time| match time {
+                DHCPOption::IpLeasetime(leasetime) => leasetime,
+                _ => unreachable!(),
+            }).copied()
+    }
+
     pub fn print(&self) {
-        println!("op:\t\t\t{:?}", self.op);
+        // println!("op:\t\t\t{:?}", self.op);
         println!("dhcp_message_type:\t{:?}", self.dhcp_message_type);
-        println!("htype:\t\t\t{:?}", self.htype);
-        println!("hlen:\t\t\t{:?}", self.op);
+        // println!("htype:\t\t\t{:?}", self.htype);
+        // println!("hlen:\t\t\t{:?}", self.op);
         println!("xid:\t\t\t{:?}", self.xid);
-        println!("secs:\t\t\t{:?}", std::time::Duration::from_secs(self.secs as u64));
+        println!(
+            "secs:\t\t\t{:?}",
+            std::time::Duration::from_secs(self.secs as u64)
+        );
         println!("flags:\t\t\t{:b}", self.flags);
         println!("ciaddr:\t\t\t{:?}", self.ciaddr);
         println!("yiaddr:\t\t\t{:?}", self.yiaddr);
         println!("siaddr:\t\t\t{:?}", self.siaddr);
         println!("giaddr:\t\t\t{:?}", self.giaddr);
         println!("chaddr: {:?}", self.chaddr);
-        println!("sname: {:?}", self.sname);
-        println!("file: {:?}", self.file);
+        // println!("sname: {:?}", self.sname);
+        // println!("file: {:?}", self.file);
         println!("--- options ---");
         self.options.iter().for_each(|opt| println!("{opt:?}"));
     }
@@ -163,14 +179,13 @@ impl TryFrom<&[u8]> for Packet {
 
         let mut options = DHCPOption::from_bytes_many(&buffer[240..]).unwrap();
 
-        let Some((i, dhcp_message_type)) = options.iter().enumerate().find_map(|(i, opt)| match opt {
-            DHCPOption::DHCPMessageType(message_type) => Some((i,*message_type)),
+        let Some(dhcp_message_type) = options.iter().find_map(|opt| match opt {
+            DHCPOption::DHCPMessageType(message_type) => Some(*message_type),
             _ => None,
         }) else {
             return Err(());
         };
-        options.swap_remove(i);
-
+        options.remove(&DHCPOption::DHCPMessageType(dhcp_message_type));
 
         let packet = Packet {
             op: MessageType::try_from(buffer[0]).unwrap(),

@@ -1,4 +1,6 @@
 use crate::buffer::ByteReader;
+use std::collections::HashSet;
+use std::hash::Hash;
 use std::net::Ipv4Addr;
 use std::str;
 
@@ -54,11 +56,47 @@ pub enum DHCPOption {
     ClientIdentifier(Vec<u8>),
 }
 
-impl DHCPOption {
-    pub fn from_bytes_many(buffer: &[u8]) -> Result<Vec<Self>, OptionParseErr> {
-        let mut start_index_option = 0;
+impl PartialEq for DHCPOption {
+    fn eq(&self, other: &Self) -> bool {
+        self.get_option_id() == other.get_option_id()
+    }
+}
 
-        let mut options: Vec<DHCPOption> = Vec::new();
+impl Eq for DHCPOption { }
+
+impl Hash for DHCPOption {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        state.write_u8(self.get_option_id());
+    }
+}
+
+impl DHCPOption {
+    pub fn get_option_id(&self) -> u8 {
+        match self {
+            DHCPOption::Subnet(_) => 1,
+            DHCPOption::Router(_) => 3,
+            DHCPOption::DomainNameServer(_) => 6,
+            DHCPOption::HostName(_) => 12,
+            DHCPOption::DomainName(_) => 15,
+            DHCPOption::RequestedIp(_) => 50,
+            DHCPOption::IpLeasetime(_) => 51,
+            DHCPOption::OptionOverload(_) => 52,
+            DHCPOption::DHCPMessageType(_) => 53,
+            DHCPOption::ServerIdentifier(_) => 54,
+            DHCPOption::ParameterRequest(_) => 55,
+            DHCPOption::Message(_) => 56,
+            DHCPOption::DHCPMessageSize(_) => 57,
+            DHCPOption::RenewalTime(_) => 58,
+            DHCPOption::RebindingTime(_) => 59,
+            DHCPOption::ClassIdentifier(_) => 60,
+            DHCPOption::ClientIdentifier(_) => 61,
+            DHCPOption::Unimplemented { option_code, len: _ } => *option_code
+        }
+    }
+
+    pub fn from_bytes_many(buffer: &[u8]) -> Result<HashSet<Self>, OptionParseErr> {
+        let mut start_index_option = 0;
+        let mut options: HashSet<DHCPOption> = HashSet::new();
 
         loop {
             let result = DHCPOption::from_bytes(&buffer[start_index_option..])?;
@@ -67,7 +105,7 @@ impl DHCPOption {
                 OptionsParseResult::End => break,
                 OptionsParseResult::Padding => start_index_option += 1,
                 OptionsParseResult::Done(option, len) => {
-                    options.push(option);
+                    options.insert(option);
                     start_index_option += 2 + len;
                 }
             }
@@ -76,7 +114,7 @@ impl DHCPOption {
         Ok(options)
     }
 
-    pub fn to_bytes_many(options: &[DHCPOption], buffer: &mut [u8]) -> usize {
+    pub fn to_bytes_many(options: &HashSet<DHCPOption>, buffer: &mut [u8]) -> usize {
         let mut index = 0;
         for option in options {
             index += option.write_bytes(&mut buffer[index..]) + 2; // len van data + tag + lengte
@@ -191,7 +229,7 @@ impl DHCPOption {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum DHCPMessageType {
     DHCPDISCOVER = 1,
     DHCPOFFER = 2,
@@ -224,7 +262,7 @@ impl From<DHCPMessageType> for u8 {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum OptionOverload {
     File = 1,
     Sname = 2,
@@ -246,5 +284,30 @@ impl TryFrom<u8> for OptionOverload {
 impl From<OptionOverload> for u8 {
     fn from(value: OptionOverload) -> Self {
         value as u8
+    }
+}
+
+
+#[cfg(test)]
+mod test {
+    use std::{collections::HashSet, net::Ipv4Addr};
+
+    use super::DHCPOption;
+
+    #[test]
+    fn testing() {
+        let ip1 = Ipv4Addr::new(192, 168, 0, 1);
+        let ip2 = Ipv4Addr::new(192, 168, 0, 2);
+
+        let opt1 = DHCPOption::ServerIdentifier(ip1);
+        let opt2 = DHCPOption::ServerIdentifier(ip2);
+
+        let mut set: HashSet<DHCPOption> = HashSet::new();
+        set.insert(DHCPOption::ServerIdentifier(ip1));
+
+        assert!(!set.insert(DHCPOption::ServerIdentifier(ip2)));
+
+        assert!(set.insert(DHCPOption::Subnet(ip1)));
+        assert!(!set.insert(DHCPOption::Subnet(ip2)));
     }
 }

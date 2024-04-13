@@ -22,8 +22,10 @@ fn main() {
     let server = UdpSocket::bind((BROADCAST_ADDR, SERVER_PORT)).unwrap();
     server.set_broadcast(true).unwrap();
     let mut server_state = LeaseRange::new(
-        Ipv4Addr::new(192, 168, 56, 2),
+        Ipv4Addr::new(192, 168, 56, 3),
         Ipv4Addr::new(192, 168, 56, 255),
+        Ipv4Addr::new(192, 168, 56, 1),
+        Ipv4Addr::new(255, 255, 255, 0)
     );
     loop {
         let mut buff = [0; 4096];
@@ -52,21 +54,19 @@ fn main() {
         }
         println!("sent: {response_addr:?}");
         let _ = server
-            .send_to(&buff[0..len], (response_addr, CLIENT_PORT))
-            .unwrap();
+            .send_to(&buff[0..len], (response_addr, CLIENT_PORT));
     }
 }
 
 fn handle_packet(packet: Packet, _src: SocketAddr, data: &mut LeaseRange) -> Option<Packet> {
-    println!("------ {:?}", Utc::now() + chrono::Duration::hours(2));
-    packet.print();
     println!();
+    println!("------ {:?}", Utc::now() + chrono::Duration::hours(2));
+    // packet.print();
+
 
     match packet.dhcp_message_type {
-        DHCPMessageType::DHCPDISCOVER => return on_dhcp_discover(packet, data).ok(),
-        DHCPMessageType::DHCPREQUEST => return on_dhcp_request(packet, data).ok(),
-        _ => (),
+        DHCPMessageType::DHCPDISCOVER => on_dhcp_discover(packet, data).ok(),
+        DHCPMessageType::DHCPREQUEST => on_dhcp_request(packet, data).ok(),
+        _ => None,
     }
-
-    None
 }

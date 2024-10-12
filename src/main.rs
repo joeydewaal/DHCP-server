@@ -1,10 +1,11 @@
 #![allow(dead_code)]
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
+use std::net::Ipv4Addr;
 
-use chrono::Utc;
+use error::DHCPError;
 use leases::LeaseRange;
-use packet::Packet;
-use standard::CLIENT_PORT;
+use server::{Client, Server};
+use state::DHCPState;
+use tokio::task;
 
 use crate::{
     handlers::{on_dhcp_discover, on_dhcp_request},
@@ -13,60 +14,45 @@ use crate::{
 };
 
 mod buffer;
+mod error;
 mod handlers;
 mod leases;
 mod packet;
+mod server;
 mod standard;
+mod state;
 
-fn main() {
-    let server = UdpSocket::bind((BROADCAST_ADDR, SERVER_PORT)).unwrap();
-    server.set_broadcast(true).unwrap();
-    let mut server_state = LeaseRange::new(
+#[tokio::main]
+async fn main() -> Result<(), error::DHCPError> {
+    tracing_subscriber::fmt().init();
+
+    let mut server = Server::start().await?;
+
+    let lease_range = LeaseRange::new(
         Ipv4Addr::new(192, 168, 56, 3),
         Ipv4Addr::new(192, 168, 56, 255),
         Ipv4Addr::new(192, 168, 56, 1),
-        Ipv4Addr::new(255, 255, 255, 0)
+        Ipv4Addr::new(255, 255, 255, 0),
     );
+
+    let server_state = DHCPState::from_lease(lease_range);
+    tracing::info!("Server started: {}:{}", BROADCAST_ADDR, SERVER_PORT);
+
     loop {
-        let mut buff = [0; 4096];
-        let (len, src) = server.recv_from(&mut buff).unwrap();
-        println!("source: {src:?}");
+        let client = server.receive().await?;
 
-        let packet = match Packet::try_from(&buff[..len]) {
-            Ok(packet) => packet,
-            Err(error) => {
-                println!("ERR: {error:?}");
-                continue;
-            }
-        };
-
-        let response = handle_packet(packet, src, &mut server_state);
-
-        let Some(resp) = response else {
-            continue;
-        };
-
-        let len = resp.write_to_bytes(&mut buff);
-
-        let mut response_addr = src.ip();
-        if resp.is_broadcast() {
-            response_addr = IpAddr::from(BROADCAST_ADDR);
-        }
-        println!("sent: {response_addr:?}");
-        let _ = server
-            .send_to(&buff[0..len], (response_addr, CLIENT_PORT));
+        let state = server_state.clone();
+        let _ = task::spawn(handle_request(client, state));
     }
 }
 
-fn handle_packet(packet: Packet, _src: SocketAddr, data: &mut LeaseRange) -> Option<Packet> {
-    println!();
-    println!("------ {:?}", Utc::now() + chrono::Duration::hours(2));
-    // packet.print();
+async fn handle_request(client: Client, state: DHCPState) -> Result<(), DHCPError> {
+    let response = match client.packet.dhcp_message_type {
+        DHCPMessageType::DHCPDISCOVER => on_dhcp_discover(client.packet.clone(), state)?,
+        DHCPMessageType::DHCPREQUEST => on_dhcp_request(client.packet.clone(), state)?,
+        _ => unimplemented!(),
+    };
 
-
-    match packet.dhcp_message_type {
-        DHCPMessageType::DHCPDISCOVER => on_dhcp_discover(packet, data).ok(),
-        DHCPMessageType::DHCPREQUEST => on_dhcp_request(packet, data).ok(),
-        _ => None,
-    }
+    client.send_back(response).await;
+    Ok(())
 }

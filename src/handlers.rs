@@ -1,38 +1,40 @@
-use crate::{leases::LeaseRange, packet::{DHCPMessageType, Packet}};
+use crate::{error::DHCPError, packet::{DHCPMessageType, Packet}, state::DHCPState};
 
 #[derive(Debug)]
 pub enum DiscoverResult {
     NoLeases,
 }
 
-pub fn on_dhcp_discover( mut packet: Packet, data: &mut LeaseRange ) -> Result<Packet, DiscoverResult> {
+pub fn on_dhcp_discover( mut packet: Packet, state: DHCPState) -> Result<Packet, DHCPError> {
+    let mut lease_range = state.lock();
     println!("Got discover");
 
     println!("Client");
     packet.print();
-    let ip = data.get_available_ip(packet.xid).ok_or(DiscoverResult::NoLeases)?;
+    let ip = lease_range.get_available_ip(packet.xid).unwrap();
 
     packet.yiaddr = ip;
     packet.into_response(DHCPMessageType::DHCPOFFER);
-    packet.override_option(data.get_subnet_option());
-    packet.override_option(data.get_leasetime_option());
-    packet.override_option(data.get_server_id_option());
+    packet.override_option(lease_range.get_subnet_option());
+    packet.override_option(lease_range.get_leasetime_option());
+    packet.override_option(lease_range.get_server_id_option());
 
     println!("\nResponse");
     packet.print();
     Ok(packet)
 }
 
-pub fn on_dhcp_request( packet: Packet , data: &mut LeaseRange ) -> Result<Packet, ()> {
+pub fn on_dhcp_request( packet: Packet , state: DHCPState) -> Result<Packet, DHCPError> {
+    let mut lease_range = state.lock();
     println!("Got request");
     println!("Client");
     packet.print();
 
     let ip = packet.get_requested_ip().unwrap();
 
-    let result = data.reserve_ip(packet, ip);
+    let result = lease_range.reserve_ip(&packet, ip);
     println!("Result: {result:?}");
-    Err(())
+    Ok(packet)
 }
 
 // pub fn on_dhcp_discover( packet: Packet,data: &mut LeaseRange ) -> Result<(), ()> {

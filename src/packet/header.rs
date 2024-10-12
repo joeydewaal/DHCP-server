@@ -1,4 +1,6 @@
+
 #[derive(Debug, Clone, Copy)]
+#[repr(u8)]
 pub enum MessageType {
     BOOTREQUEST = 1,
     BOOTREPLY = 2,

@@ -75,7 +75,7 @@ impl LeaseRange {
         None
     }
 
-    pub fn reserve_ip(&mut self, packet: Packet, ip: Ipv4Addr) -> Result<(), LeaseReserveError> {
+    pub fn reserve_ip(&mut self, packet: &Packet, ip: Ipv4Addr) -> Result<(), LeaseReserveError> {
         let Some(state) = self.data.get_mut(&ip) else {
             return Err(LeaseReserveError::NotRequested);
         };

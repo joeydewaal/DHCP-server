@@ -1,21 +1,26 @@
 use std::collections::HashSet;
 use std::fmt::Debug;
+use std::io::Cursor;
 use std::net::Ipv4Addr;
 
 mod header;
 mod option;
 mod time;
 
+use byteorder::NetworkEndian;
+use byteorder::ReadBytesExt;
 pub use option::DHCPMessageType;
 pub use option::DHCPOption;
 pub use time::LeaseTime;
+pub use option::OptionParseErr;
 
 use crate::buffer::ByteWriter;
+use crate::error::DHCPError;
 use crate::standard::MAGIC_COOKIE;
 
 use self::header::MessageType;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Packet {
     op: MessageType,
     htype: u8,
@@ -101,7 +106,8 @@ impl Packet {
             .map(|time| match time {
                 DHCPOption::IpLeasetime(leasetime) => leasetime,
                 _ => unreachable!(),
-            }).copied()
+            })
+            .copied()
     }
 
     pub fn print(&self) {
@@ -163,48 +169,75 @@ impl Packet {
 }
 
 impl TryFrom<&[u8]> for Packet {
-    type Error = ();
+    type Error = DHCPError;
 
     fn try_from(buffer: &[u8]) -> Result<Self, Self::Error> {
+        let mut buffer = Cursor::new(buffer);
+
+        let op = MessageType::try_from(buffer.read_u8()?).unwrap();
+        let htype = buffer.read_u8()?;
+        let hlen = buffer.read_u8()?;
+        let hops = buffer.read_u8()?;
+
+        let xid = buffer.read_u32::<NetworkEndian>()?;
+        let secs = buffer.read_u16::<NetworkEndian>()?;
+
+        let flags = buffer.read_u16::<NetworkEndian>()?;
+
+        fn read_ipaddr(buffer: &mut Cursor<&[u8]>) -> Result<Ipv4Addr, DHCPError> {
+            Ok(Ipv4Addr::from([
+                buffer.read_u8()?,
+                buffer.read_u8()?,
+                buffer.read_u8()?,
+                buffer.read_u8()?,
+            ]))
+        }
+
+        let ciaddr = read_ipaddr(&mut buffer)?;
+        let yiaddr = read_ipaddr(&mut buffer)?;
+        let siaddr = read_ipaddr(&mut buffer)?;
+        let giaddr = read_ipaddr(&mut buffer)?;
+
         let mut chaddr: [u8; 16] = [0; 16];
-        chaddr.copy_from_slice(&buffer[28..44]);
+        chaddr.copy_from_slice(&buffer.get_ref()[28..44]);
 
         let mut sname = [0; 64];
-        sname.copy_from_slice(&buffer[44..108]);
+        sname.copy_from_slice(&buffer.get_ref()[44..108]);
 
         let mut file = [0; 128];
-        file.copy_from_slice(&buffer[108..236]);
+        file.copy_from_slice(&buffer.get_ref()[108..236]);
 
-        assert!(buffer[236..240] == MAGIC_COOKIE);
+        assert!(buffer.get_ref()[236..240] == MAGIC_COOKIE);
 
-        let mut options = DHCPOption::from_bytes_many(&buffer[240..]).unwrap();
+        let mut options = DHCPOption::from_bytes_many(&buffer.get_ref()[240..])?;
 
         let Some(dhcp_message_type) = options.iter().find_map(|opt| match opt {
             DHCPOption::DHCPMessageType(message_type) => Some(*message_type),
             _ => None,
         }) else {
-            return Err(());
+            return Err(DHCPError::Protocol(
+                "No DHCP message type in options".into(),
+            ));
         };
         options.remove(&DHCPOption::DHCPMessageType(dhcp_message_type));
 
-        let packet = Packet {
-            op: MessageType::try_from(buffer[0]).unwrap(),
-            htype: buffer[1],
-            hlen: buffer[2],
-            hops: buffer[3],
-            xid: u32::from_be_bytes([buffer[4], buffer[5], buffer[6], buffer[7]]),
-            secs: u16::from_be_bytes([buffer[8], buffer[9]]),
-            flags: u16::from_be_bytes([buffer[10], buffer[11]]),
-            ciaddr: Ipv4Addr::from([buffer[12], buffer[13], buffer[14], buffer[15]]),
-            yiaddr: Ipv4Addr::from([buffer[16], buffer[17], buffer[18], buffer[19]]),
-            siaddr: Ipv4Addr::from([buffer[20], buffer[21], buffer[22], buffer[23]]),
-            giaddr: Ipv4Addr::from([buffer[24], buffer[25], buffer[26], buffer[27]]),
+        Ok(Packet {
+            op,
+            htype,
+            hlen,
+            hops,
+            xid,
+            secs,
+            flags,
+            ciaddr,
+            yiaddr,
+            siaddr,
+            giaddr,
             chaddr,
             sname,
             file,
             options,
             dhcp_message_type,
-        };
-        Ok(packet)
+        })
     }
 }

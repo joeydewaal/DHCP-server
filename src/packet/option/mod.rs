@@ -1,11 +1,11 @@
+use thiserror::Error;
+
 use crate::buffer::ByteReader;
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::net::Ipv4Addr;
 use std::str;
-
 use self::bytes::OptionToByte;
-
 use super::time::LeaseTime;
 
 mod bytes;
@@ -62,7 +62,7 @@ impl PartialEq for DHCPOption {
     }
 }
 
-impl Eq for DHCPOption { }
+impl Eq for DHCPOption {}
 
 impl Hash for DHCPOption {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -90,7 +90,10 @@ impl DHCPOption {
             DHCPOption::RebindingTime(_) => 59,
             DHCPOption::ClassIdentifier(_) => 60,
             DHCPOption::ClientIdentifier(_) => 61,
-            DHCPOption::Unimplemented { option_code, len: _ } => *option_code
+            DHCPOption::Unimplemented {
+                option_code,
+                len: _,
+            } => *option_code,
         }
     }
 
@@ -163,10 +166,13 @@ pub enum OptionsParseResult {
     Done(DHCPOption, usize),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum OptionParseErr {
+    #[error("OptionOverLoad")]
     OptionOverLoad,
+    #[error("DHCPMessageType")]
     DHCPMessageType,
+    #[error("StringErr")]
     StringErr,
 }
 
@@ -286,7 +292,6 @@ impl From<OptionOverload> for u8 {
         value as u8
     }
 }
-
 
 #[cfg(test)]
 mod test {
